@@ -3,7 +3,7 @@ import torch
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, TQDMProgressBar
 
-from data.mc2cnn import MC2CNNDataModule
+from data.__init__ import MC2CNNDataModule
 from model import MC2CNN
 
 if __name__ == '__main__':
