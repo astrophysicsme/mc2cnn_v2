@@ -31,7 +31,7 @@ if __name__ == '__main__':
     early_stopping_monitor = "val_accuracy"
     early_stopping_min_delta = 0.00
     early_stopping_patience = 3
-    early_stopping_verbose = True
+    early_stopping_verbose = False
     early_stopping_mode = "max"
 
     torch.cuda.empty_cache()
@@ -69,16 +69,13 @@ if __name__ == '__main__':
         ]
     )
 
+    # TODO: investigate if we can fix the loss = nan issue when we use auto learning rate finder
     # finds learning rate automatically
     # trainer.tune(model=mc2cnn50, datamodule=mc2cnn_data_module)
 
-    # TODO: log more variables during training and validating
-    # TODO: check if we can draw plots during training and validating
     # Train the model
     trainer.fit(model=mc2cnn50, datamodule=mc2cnn_data_module)
 
     # TODO: Hyperparameter tuning
 
-    # TODO: log more variables during testing
-    # TODO: check if we can draw plots during testing
     # trainer.test(model=mc2cnn152, ckpt_path="best", datamodule=mc2cnn_data_module)

@@ -24,9 +24,6 @@ class MC2CNN(LightningModule):
         self.val_accuracy = None
         self.test_accuracy = None
 
-        self.val_metrics = None
-        self.test_metrics = None
-
         self.val_mean_precision_recall = MeanAveragePrecision(class_metrics=True)
         self.test_mean_precision_recall = MeanAveragePrecision(class_metrics=True)
 
