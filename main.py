@@ -73,4 +73,4 @@ if __name__ == '__main__':
 
     # TODO: Hyperparameter tuning
 
-    # trainer.test(model=mc2cnn152, ckpt_path="best", datamodule=mc2cnn_data_module)
+    # trainer.test(model=mc2cnn, ckpt_path="best", datamodule=mc2cnn_data_module)
