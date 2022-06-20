@@ -12,7 +12,8 @@ from torchvision.ops import box_iou
 
 
 class MC2CNN(LightningModule):
-    def __init__(self, resnet_name, n_classes=2, lr_rate=1e-4, batch_size=4):
+    def __init__(self, resnet_name, n_classes=2, lr_rate=1e-4, batch_size=4, weight_decay=0.5e-4, momentum=0.9,
+                 box_nms_threshold=0.5, max_image_size=1333):
         super().__init__()
 
         assert resnet_name in ("resnet18", "resnet34", "resnet50", "resnet101", "resnet152")
@@ -27,13 +28,16 @@ class MC2CNN(LightningModule):
         self.val_mean_precision_recall = MeanAveragePrecision(class_metrics=True)
         self.test_mean_precision_recall = MeanAveragePrecision(class_metrics=True)
 
-        self.detector = _fasterrcnn_resnet_fpn(resnet_name=resnet_name, pretrained=True)
+        self.detector = _fasterrcnn_resnet_fpn(resnet_name=resnet_name, pretrained=True,
+                                               box_nms_threshold=box_nms_threshold, max_image_size=max_image_size)
 
         in_features = self.detector.roi_heads.box_predictor.cls_score.in_features
         self.detector.roi_heads.box_predictor = FastRCNNPredictor(in_features, n_classes)
 
         self.lr = lr_rate
+        self.weight_decay = weight_decay
         self.batch_size = batch_size
+        self.momentum = momentum
 
     def forward(self, images, targets=None):
         # Torchvision FasterRCNN returns the loss during training
@@ -42,8 +46,13 @@ class MC2CNN(LightningModule):
         return self.detector(images)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr or self.learning_rate)
-        return optimizer
+        optimizer = torch.optim.SGD(self.parameters(), lr=self.lr or self.learning_rate,
+                                    weight_decay=self.weight_decay, momentum=self.momentum)
+
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.75, patience=3,
+                                                                  min_lr=0)
+
+        return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'val_accuracy'}
 
     def training_step(self, batch, batch_idx):
         images, boxes, labels = batch
@@ -186,7 +195,7 @@ def _validate_trainable_layers(pretrained, trainable_backbone_layers, max_value,
 
 
 def _fasterrcnn_resnet_fpn(resnet_name, pretrained=False, num_classes=91, pretrained_backbone=True,
-                           trainable_backbone_layers=None, **kwargs):
+                           trainable_backbone_layers=None, box_nms_threshold=0.5, max_image_size=1333, **kwargs):
     """
     Constructs a Faster R-CNN model with a ResNet-101-FPN backbone.
 
@@ -233,7 +242,7 @@ def _fasterrcnn_resnet_fpn(resnet_name, pretrained=False, num_classes=91, pretra
         pretrained or pretrained_backbone, trainable_backbone_layers, 5, 3)
 
     backbone = resnet_fpn_backbone(resnet_name, pretrained, trainable_layers=trainable_backbone_layers)
-    model = FasterRCNN(backbone, num_classes, **kwargs)
+    model = FasterRCNN(backbone, num_classes, box_nms_thresh=box_nms_threshold, max_size=max_image_size, **kwargs)
     if pretrained:
         overwrite_eps(model, 0.0)
 

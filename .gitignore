@@ -5,6 +5,7 @@
 datasets
 
 lightning_logs
+logs
 comet_logs
 
 venv

@@ -13,12 +13,17 @@ if __name__ == '__main__':
     mc2cnn_data_directory = "datasets"
     mc2cnn_data_annotation_file_name = "_annotation.coco.json"
     mc2cnn_data_num_workers = 0
-    mc2cnn_data_batch_size = 4
+    mc2cnn_data_batch_size = 2
+
+    mc2cnn_max_image_size = 1950
 
     mc2cnn_num_classes = 12
-    mc2cnn_learning_rate = 5e-4  # this learning rate will be overwritten by the auto learning rate finder
+    mc2cnn_learning_rate = 0.0001
+    mc2cnn_weight_decay = 0.005
+    mc2cnn_momentum = 0.9
 
-    trainer_enable_auto_lr_finder = True
+    mc2cnn_box_nms_threshold = 0.3
+
     trainer_num_gpus = min(1, torch.cuda.device_count())
     trainer_epochs = 100
     trainer_log_every_n_step = 1
@@ -30,7 +35,7 @@ if __name__ == '__main__':
 
     early_stopping_monitor = "val_accuracy"
     early_stopping_min_delta = 0.00
-    early_stopping_patience = 3
+    early_stopping_patience = 5
     early_stopping_verbose = False
     early_stopping_mode = "max"
 
@@ -43,20 +48,12 @@ if __name__ == '__main__':
                                           max_pallets_to_load=max_pallets_to_load)
 
     # Init our model
-    # mc2cnn18 = MC2CNN(resnet_name="resnet18", n_classes=mc2cnn_num_classes, lr_rate=mc2cnn_learning_rate,
-    #                   batch_size=mc2cnn_data_batch_size)
-    # mc2cnn34 = MC2CNN(resnet_name="resnet34", n_classes=mc2cnn_num_classes, lr_rate=mc2cnn_learning_rate,
-    #                   batch_size=mc2cnn_data_batch_size)
-    mc2cnn50 = MC2CNN(resnet_name="resnet50", n_classes=mc2cnn_num_classes, lr_rate=mc2cnn_learning_rate,
-                      batch_size=mc2cnn_data_batch_size)
-    # mc2cnn101 = MC2CNN(resnet_name="resnet101", n_classes=mc2cnn_num_classes, lr_rate=mc2cnn_learning_rate,
-    #                    batch_size=mc2cnn_data_batch_size)
-    # mc2cnn152 = MC2CNN(resnet_name="resnet152", n_classes=mc2cnn_num_classes, lr_rate=mc2cnn_learning_rate,
-    #                    batch_size=mc2cnn_data_batch_size)
+    mc2cnn = MC2CNN(resnet_name="resnet152", n_classes=mc2cnn_num_classes, lr_rate=mc2cnn_learning_rate,
+                    batch_size=mc2cnn_data_batch_size, box_nms_threshold=mc2cnn_box_nms_threshold,
+                    weight_decay=mc2cnn_weight_decay, momentum=mc2cnn_momentum, max_image_size=mc2cnn_max_image_size)
 
     # Initialize a trainer
     trainer = Trainer(
-        # auto_lr_find=trainer_enable_auto_lr_finder,
         max_epochs=trainer_epochs,
         gpus=trainer_num_gpus,
         log_every_n_steps=trainer_log_every_n_step,
@@ -69,12 +66,10 @@ if __name__ == '__main__':
         ]
     )
 
-    # TODO: investigate if we can fix the loss = nan issue when we use auto learning rate finder
-    # finds learning rate automatically
-    # trainer.tune(model=mc2cnn50, datamodule=mc2cnn_data_module)
+    trainer.tune(model=mc2cnn, datamodule=mc2cnn_data_module)
 
     # Train the model
-    trainer.fit(model=mc2cnn50, datamodule=mc2cnn_data_module)
+    trainer.fit(model=mc2cnn, datamodule=mc2cnn_data_module)
 
     # TODO: Hyperparameter tuning
 
