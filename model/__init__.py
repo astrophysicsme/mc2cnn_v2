@@ -20,8 +20,6 @@ class MC2CNN(LightningModule):
         assert resnet_name in ("resnet18", "resnet34", "resnet50", "resnet101", "resnet152")
 
         self.train_loss = None
-        self.val_loss = None
-        self.test_loss = None
 
         self.val_accuracy = None
         self.test_accuracy = None
@@ -41,8 +39,6 @@ class MC2CNN(LightningModule):
         self.momentum = momentum
 
     def forward(self, images, targets=None):
-        # Torchvision FasterRCNN returns the loss during training
-        # and the boxes during eval
         self.detector.eval()
         return self.detector(images)
 
@@ -70,7 +66,6 @@ class MC2CNN(LightningModule):
 
     def validation_epoch_end(self, validation_step_outputs):
         val_mean_precision_recall = {"val_" + k: v for k, v in self.val_mean_precision_recall.compute().items()}
-
         # val_mean_precision_per_class = val_mean_precision_recall.pop("val_map_per_class")
         # val_mean_recall_per_class = val_mean_precision_recall.pop("val_mar_100_per_class")
 
@@ -85,12 +80,8 @@ class MC2CNN(LightningModule):
 
     def test_epoch_end(self, test_step_outputs):
         test_mean_precision_recall = {"test_" + k: v for k, v in self.test_mean_precision_recall.compute().items()}
-        # test_mean_precision_per_class = test_mean_precision_recall.pop("test_map_per_class")
-        # test_mean_recall_per_class = test_mean_precision_recall.pop("test_mar_100_per_class")
 
         self.log_dict(test_mean_precision_recall, sync_dist=True)
-        # self.log_dict({f"test_map_": value for value in test_mean_precision_per_class}, sync_dist=True)
-        # self.log_dict({f"test_mar_100_": value for value in test_mean_recall_per_class}, sync_dist=True)
 
         self.test_mean_precision_recall.reset()
 
@@ -120,9 +111,6 @@ class MC2CNN(LightningModule):
 
     @staticmethod
     def _accuracy(src_boxes, pred_boxes, iou_threshold=1.):
-        """
-        The accuracy method is not the one used in the evaluator but very similar
-        """
         total_gt = len(src_boxes)
         total_pred = len(pred_boxes)
         if total_gt > 0 and total_pred > 0:
