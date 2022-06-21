@@ -25,6 +25,7 @@ class MC2CNN(LightningModule):
         assert resnet_name in ("resnet18", "resnet34", "resnet50", "resnet101", "resnet152")
 
         self.train_loss = None
+        self.val_loss = None
 
         self.val_accuracy = None
         self.test_accuracy = None
