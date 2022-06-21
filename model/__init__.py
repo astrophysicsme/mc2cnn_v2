@@ -64,7 +64,6 @@ class MC2CNN(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         accuracy, loss = self._evaluate(batch, self.val_mean_precision_recall, prefix="val")
-        self.log("val_accuracy", accuracy, batch_size=self.batch_size, on_step=False, on_epoch=True)
         return {"val_accuracy": accuracy, "val_loss": loss}
 
     def validation_epoch_end(self, validation_step_outputs):

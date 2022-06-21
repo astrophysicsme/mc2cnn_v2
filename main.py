@@ -9,7 +9,7 @@ from model import MC2CNN
 
 if __name__ == '__main__':
     # TODO: place the below configurations in config files. probably use hydra
-    max_pallets_to_load = 1  # use int <= 0 to load all available pallets
+    max_pallets_to_load = 0  # use int <= 0 to load all available pallets
 
     mc2cnn_data_directory = "datasets"
     mc2cnn_data_annotation_file_name = "_annotation.coco.json"
