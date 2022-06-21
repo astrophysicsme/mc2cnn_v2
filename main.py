@@ -9,7 +9,7 @@ from model import MC2CNN
 
 if __name__ == '__main__':
     # TODO: place the below configurations in config files. probably use hydra
-    max_pallets_to_load = 0  # use int <= 0 to load all available pallets
+    max_pallets_to_load = 1  # use int <= 0 to load all available pallets
 
     mc2cnn_data_directory = "datasets"
     mc2cnn_data_annotation_file_name = "_annotation.coco.json"
@@ -40,6 +40,8 @@ if __name__ == '__main__':
     early_stopping_verbose = False
     early_stopping_mode = "max"
 
+    tensorboard_logger_save_dir = "./"
+
     torch.cuda.empty_cache()
 
     # Init our data module
@@ -59,7 +61,7 @@ if __name__ == '__main__':
         gpus=trainer_num_gpus,
         log_every_n_steps=trainer_log_every_n_step,
         precision=trainer_precision,
-        logger=TensorBoardLogger("./"),
+        logger=TensorBoardLogger(save_dir=tensorboard_logger_save_dir),
         callbacks=[
             LearningRateMonitor(logging_interval=learning_rate_logging_interval),
             TQDMProgressBar(refresh_rate=tqdm_progress_bar_refresh_rate),

@@ -65,7 +65,7 @@ class MC2CNN(LightningModule):
     def validation_step(self, batch, batch_idx):
         accuracy, loss = self._evaluate(batch, self.val_mean_precision_recall, prefix="val")
         self.log("val_accuracy", accuracy, batch_size=self.batch_size, on_step=False, on_epoch=True)
-        return accuracy
+        return {"val_accuracy": accuracy, "val_loss": loss}
 
     def validation_epoch_end(self, validation_step_outputs):
         val_mean_precision_recall = {"val_" + k: v for k, v in self.val_mean_precision_recall.compute().items()}
@@ -74,7 +74,7 @@ class MC2CNN(LightningModule):
 
     def test_step(self, batch, batch_idx):
         accuracy, loss = self._evaluate(batch, self.test_mean_precision_recall, prefix="test")
-        return accuracy
+        return {"test_accuracy": accuracy, "test_loss": loss}
 
     def test_epoch_end(self, test_step_outputs):
         test_mean_precision_recall = {"test_" + k: v for k, v in self.test_mean_precision_recall.compute().items()}
@@ -89,11 +89,9 @@ class MC2CNN(LightningModule):
 
         accuracy = torch.mean(
             torch.stack([self._accuracy(b, pb["boxes"], 0.1) for b, pb in zip(boxes, pred_boxes)]))
-        # self.log(f"{prefix}_accuracy", accuracy, batch_size=self.batch_size, on_step=False, on_epoch=True)
         self.logger.experiment.add_scalars('accuracy', {f"{prefix}": accuracy}, self.global_step)
 
         loss = sum(loss for loss in loss_dict.values())
-        # self.log(f"{prefix}_loss", loss, batch_size=self.batch_size, on_step=False, on_epoch=True)
         self.logger.experiment.add_scalars('loss', {f"{prefix}": loss}, self.global_step)
 
         if mean_precision_recall:
@@ -183,7 +181,7 @@ class MC2CNN(LightningModule):
         model.rpn.training = True
         # model.roi_heads.training=True
 
-        #####proposals, proposal_losses = model.rpn(images, features, targets)
+        # proposals, proposal_losses = model.rpn(images, features, targets)
         features_rpn = list(features.values())
         objectness, pred_bbox_deltas = model.rpn.head(features_rpn)
         anchors = model.rpn.anchor_generator(images, features_rpn)
@@ -199,7 +197,6 @@ class MC2CNN(LightningModule):
         proposals = proposals.view(num_images, -1, 4)
         proposals, scores = model.rpn.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
 
-        proposal_losses = {}
         assert targets is not None
         labels, matched_gt_boxes = model.rpn.assign_targets_to_anchors(anchors, targets)
         regression_targets = model.rpn.box_coder.encode(matched_gt_boxes, anchors)
@@ -211,7 +208,7 @@ class MC2CNN(LightningModule):
             "loss_rpn_box_reg": loss_rpn_box_reg,
         }
 
-        #####detections, detector_losses = model.roi_heads(features, proposals, images.image_sizes, targets)
+        # detections, detector_losses = model.roi_heads(features, proposals, images.image_sizes, targets)
         image_shapes = images.image_sizes
         proposals, matched_idxs, labels, regression_targets = model.roi_heads.select_training_samples(proposals,
                                                                                                       targets)
@@ -220,7 +217,7 @@ class MC2CNN(LightningModule):
         class_logits, box_regression = model.roi_heads.box_predictor(box_features)
 
         result: List[Dict[str, torch.Tensor]] = []
-        detector_losses = {}
+
         loss_classifier, loss_box_reg = fastrcnn_loss(class_logits, box_regression, labels, regression_targets)
         detector_losses = {"loss_classifier": loss_classifier, "loss_box_reg": loss_box_reg}
         boxes, scores, labels = model.roi_heads.postprocess_detections(class_logits, box_regression, proposals,
@@ -235,8 +232,7 @@ class MC2CNN(LightningModule):
                 }
             )
         detections = result
-        detections = model.transform.postprocess(detections, images.image_sizes,
-                                                 original_image_sizes)  # type: ignore[operator]
+        detections = model.transform.postprocess(detections, images.image_sizes, original_image_sizes)
         model.rpn.training = False
         model.roi_heads.training = False
         losses = {}
