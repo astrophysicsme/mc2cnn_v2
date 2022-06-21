@@ -64,6 +64,7 @@ class MC2CNN(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         accuracy, loss = self._evaluate(batch, self.val_mean_precision_recall, prefix="val")
+        self.log("val_accuracy", accuracy, batch_size=self.batch_size, on_step=False, on_epoch=True)
         return accuracy
 
     def validation_epoch_end(self, validation_step_outputs):
@@ -89,11 +90,11 @@ class MC2CNN(LightningModule):
         accuracy = torch.mean(
             torch.stack([self._accuracy(b, pb["boxes"], 0.1) for b, pb in zip(boxes, pred_boxes)]))
         # self.log(f"{prefix}_accuracy", accuracy, batch_size=self.batch_size, on_step=False, on_epoch=True)
-        self.logger.experiment.add_scalars('accuracies', {f"{prefix}_accuracy": accuracy}, self.global_step)
+        self.logger.experiment.add_scalars('accuracy', {f"{prefix}": accuracy}, self.global_step)
 
         loss = sum(loss for loss in loss_dict.values())
         # self.log(f"{prefix}_loss", loss, batch_size=self.batch_size, on_step=False, on_epoch=True)
-        self.logger.experiment.add_scalars('losses', {f"{prefix}_loss": loss}, self.global_step)
+        self.logger.experiment.add_scalars('loss', {f"{prefix}": loss}, self.global_step)
 
         if mean_precision_recall:
             mean_precision_recall.update(pred_boxes, targets)
