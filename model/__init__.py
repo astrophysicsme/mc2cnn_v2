@@ -26,7 +26,9 @@ class MC2CNN(LightningModule):
 
         self.train_loss = None
         self.val_loss = None
+        self.test_loss = None
 
+        self.train_accuracy = None
         self.val_accuracy = None
         self.test_accuracy = None
 
@@ -57,41 +59,28 @@ class MC2CNN(LightningModule):
         return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'val_accuracy'}
 
     def training_step(self, batch, batch_idx):
-        images, boxes, labels = batch
-        targets = self._convert_gt_annotations_to_targets(boxes, labels)
-
-        # fasterrcnn takes both images and targets for training
-        loss_dict = self.detector(images, targets)
-        loss = sum(loss for loss in loss_dict.values())
-        self.log("train_loss", loss, batch_size=self.batch_size, on_step=False, on_epoch=True)
-
+        accuracy, loss = self._evaluate(batch, False, prefix="train")
         return loss
 
     def validation_step(self, batch, batch_idx):
-        return self._evaluate(batch, "val_accuracy", self.val_mean_precision_recall)
+        accuracy, loss = self._evaluate(batch, self.val_mean_precision_recall, prefix="val")
+        return accuracy
 
     def validation_epoch_end(self, validation_step_outputs):
         val_mean_precision_recall = {"val_" + k: v for k, v in self.val_mean_precision_recall.compute().items()}
-        # val_mean_precision_per_class = val_mean_precision_recall.pop("val_map_per_class")
-        # val_mean_recall_per_class = val_mean_precision_recall.pop("val_mar_100_per_class")
-
         self.log_dict(val_mean_precision_recall, sync_dist=True)
-        # self.log_dict({f"val_map_": val_mean_precision_per_class}, sync_dist=True)
-        # self.log_dict({f"val_mar_100_": val_mean_recall_per_class}, sync_dist=True)
-
         self.val_mean_precision_recall.reset()
 
     def test_step(self, batch, batch_idx):
-        return self._evaluate(batch, "test_accuracy", self.test_mean_precision_recall)
+        accuracy, loss = self._evaluate(batch, self.test_mean_precision_recall, prefix="test")
+        return accuracy
 
     def test_epoch_end(self, test_step_outputs):
         test_mean_precision_recall = {"test_" + k: v for k, v in self.test_mean_precision_recall.compute().items()}
-
         self.log_dict(test_mean_precision_recall, sync_dist=True)
-
         self.test_mean_precision_recall.reset()
 
-    def _evaluate(self, batch, accuracy_var_name, mean_precision_recall):
+    def _evaluate(self, batch, mean_precision_recall, prefix="val"):
         images, boxes, labels = batch
         targets = self._convert_gt_annotations_to_targets(boxes, labels)
 
@@ -99,14 +88,17 @@ class MC2CNN(LightningModule):
 
         accuracy = torch.mean(
             torch.stack([self._accuracy(b, pb["boxes"], 0.1) for b, pb in zip(boxes, pred_boxes)]))
-        self.log(accuracy_var_name, accuracy, batch_size=self.batch_size, on_step=False, on_epoch=True)
+        # self.log(f"{prefix}_accuracy", accuracy, batch_size=self.batch_size, on_step=False, on_epoch=True)
+        self.logger.experiment.add_scalars('accuracies', {f"{prefix}_accuracy": accuracy}, self.global_step)
 
         loss = sum(loss for loss in loss_dict.values())
-        self.log("val_loss", loss, batch_size=self.batch_size, on_step=False, on_epoch=True)
+        # self.log(f"{prefix}_loss", loss, batch_size=self.batch_size, on_step=False, on_epoch=True)
+        self.logger.experiment.add_scalars('losses', {f"{prefix}_loss": loss}, self.global_step)
 
-        mean_precision_recall.update(pred_boxes, targets)
+        if mean_precision_recall:
+            mean_precision_recall.update(pred_boxes, targets)
 
-        return accuracy
+        return accuracy, loss
 
     @staticmethod
     def _convert_gt_annotations_to_targets(boxes, labels):

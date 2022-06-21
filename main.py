@@ -2,6 +2,7 @@ import torch
 
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, TQDMProgressBar
+from pytorch_lightning.loggers import TensorBoardLogger
 
 from data.__init__ import MC2CNNDataModule
 from model import MC2CNN
@@ -58,6 +59,7 @@ if __name__ == '__main__':
         gpus=trainer_num_gpus,
         log_every_n_steps=trainer_log_every_n_step,
         precision=trainer_precision,
+        logger=TensorBoardLogger("./"),
         callbacks=[
             LearningRateMonitor(logging_interval=learning_rate_logging_interval),
             TQDMProgressBar(refresh_rate=tqdm_progress_bar_refresh_rate),
