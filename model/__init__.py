@@ -109,7 +109,33 @@ class MC2CNN(LightningModule):
         self.logger.experiment.add_scalars('loss', {f"{prefix}": loss}, self.global_step)
 
         if mean_precision_recall:
-            mean_precision_recall.update(pred_boxes, targets)
+            minimized_pred_boxes = list()
+
+            for p in range(len(pred_boxes)):
+                bs = list()
+                ls = list()
+                ss = list()
+
+                b_l = pred_boxes[p]["boxes"].tolist()
+                l_l = pred_boxes[p]["labels"].tolist()
+                s_l = pred_boxes[p]["scores"].tolist()
+                for s in range(len(s_l)):
+                    if s_l[s] > 0.1:
+                        bs.append(b_l[s])
+                        ls.append(l_l[s])
+                        ss.append(s_l[s])
+
+                bs = torch.tensor(bs, dtype=torch.float32, device="cuda")
+                ls = torch.tensor(ls, dtype=torch.int64, device="cuda")
+                ss = torch.tensor(ss, dtype=torch.float32, device="cuda")
+
+                minimized_pred_boxes.append({
+                    "boxes": bs,
+                    "labels": ls,
+                    "scores": ss
+                })
+
+            mean_precision_recall.update(minimized_pred_boxes, targets)
 
         return accuracy, loss
 
