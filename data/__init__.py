@@ -1,3 +1,5 @@
+from typing import Optional, Union, Literal
+
 from torch.utils.data import DataLoader
 
 from pytorch_lightning import LightningDataModule
@@ -9,9 +11,17 @@ from transformations import transform
 
 
 class MC2CNNDataModule(LightningDataModule):
-    def __init__(self, data_dir, annotation_file_name="_annotation.coco.json", num_workers=0, batch_size=4,
-                 shuffle_train_dataloader=True, shuffle_val_dataloader=False, shuffle_test_dataloader=False,
-                 max_pallets_to_load=0):
+    def __init__(
+            self,
+            data_dir: str,
+            annotation_file_name: Optional[str] = "_annotation.coco.json",
+            num_workers: Optional[int] = 0,
+            batch_size: Optional[int] = 4,
+            shuffle_train_dataloader: Optional[bool] = True,
+            shuffle_val_dataloader: Optional[bool] = False,
+            shuffle_test_dataloader: Optional[bool] = False,
+            max_pallets_to_load: Optional[int] = 0
+    ):
         super().__init__()
         # Set our init args as class attributes
         self.max_pallets_to_load = max_pallets_to_load
@@ -34,7 +44,7 @@ class MC2CNNDataModule(LightningDataModule):
         self.shuffle_val_dataloader = shuffle_val_dataloader
         self.shuffle_test_dataloader = shuffle_test_dataloader
 
-    def setup(self, stage=None):
+    def setup(self, stage: Union[None, Literal["fit", "test"]] = None):
         # Assign train/val datasets for use in dataloaders
         if stage in (None, "fit"):
             self.train_dataset = AstroDataset(self.data_dir + "/train", self.annotation_file_name,

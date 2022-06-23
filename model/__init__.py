@@ -1,6 +1,6 @@
 import warnings
 from collections import OrderedDict
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional, Literal, Union, Any
 
 import torch
 from torch import optim
@@ -18,8 +18,17 @@ from torchvision.ops import box_iou
 
 
 class MC2CNN(LightningModule):
-    def __init__(self, resnet_name, n_classes=2, lr_rate=1e-4, batch_size=4, weight_decay=0.5e-4, momentum=0.9,
-                 box_nms_threshold=0.5, max_image_size=1333):
+    def __init__(
+            self,
+            resnet_name: Literal["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"],
+            n_classes: Optional[int] = 2,
+            lr_rate: Optional[float] = 1e-4,
+            batch_size: Optional[int] = 4,
+            weight_decay: Optional[float] = 0.5e-4,
+            momentum: Optional[float] = 0.9,
+            box_nms_threshold: Optional[float] = 0.5,
+            max_image_size: Optional[int] = 1333
+    ):
         super().__init__()
 
         assert resnet_name in ("resnet18", "resnet34", "resnet50", "resnet101", "resnet152")
@@ -64,6 +73,7 @@ class MC2CNN(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         accuracy, loss = self._evaluate(batch, self.val_mean_precision_recall, prefix="val")
+        self.log("val_accuracy", accuracy, batch_size=self.batch_size, on_step=False, on_epoch=True)
         return {"val_accuracy": accuracy, "val_loss": loss}
 
     def validation_epoch_end(self, validation_step_outputs):
@@ -80,7 +90,12 @@ class MC2CNN(LightningModule):
         self.log_dict(test_mean_precision_recall, sync_dist=True)
         self.test_mean_precision_recall.reset()
 
-    def _evaluate(self, batch, mean_precision_recall, prefix="val"):
+    def _evaluate(
+            self,
+            batch,
+            mean_precision_recall: Union[MeanAveragePrecision, bool],
+            prefix: Literal["train", "val", "test"] = "val"
+    ):
         images, boxes, labels = batch
         targets = self._convert_gt_annotations_to_targets(boxes, labels)
 
@@ -109,7 +124,7 @@ class MC2CNN(LightningModule):
         return targets
 
     @staticmethod
-    def _accuracy(src_boxes, pred_boxes, iou_threshold=1.):
+    def _accuracy(src_boxes, pred_boxes, iou_threshold: Optional[float] = 1.):
         total_gt = len(src_boxes)
         total_pred = len(pred_boxes)
         if total_gt > 0 and total_pred > 0:
@@ -257,8 +272,18 @@ def _validate_trainable_layers(pretrained, trainable_backbone_layers, max_value,
     return trainable_backbone_layers
 
 
-def _fasterrcnn_resnet_fpn(resnet_name, pretrained=False, num_classes=91, pretrained_backbone=True,
-                           trainable_backbone_layers=None, box_nms_threshold=0.5, max_image_size=1333, **kwargs):
+def _fasterrcnn_resnet_fpn(
+        resnet_name: Literal["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"],
+        pretrained: Optional[bool] = False,
+        num_classes: Optional[int] = 91,
+        pretrained_backbone: Optional[bool] = True,
+        trainable_backbone_layers=None,
+        box_nms_threshold: Optional[float] = 0.5,
+        max_image_size: Optional[int] = 1333,
+        **kwargs: Optional[Any]
+):
+    assert resnet_name in ("resnet18", "resnet34", "resnet50", "resnet101", "resnet152")
+
     trainable_backbone_layers = _validate_trainable_layers(
         pretrained or pretrained_backbone, trainable_backbone_layers, 5, 3)
 
