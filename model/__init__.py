@@ -29,7 +29,11 @@ class MC2CNN(LightningModule):
             weight_decay: Optional[float] = 0.5e-4,
             momentum: Optional[float] = 0.9,
             box_nms_threshold: Optional[float] = 0.5,
-            max_image_size: Optional[int] = 1333
+            max_image_size: Optional[int] = 1333,
+            pallet_manipulations: Optional[int] = 4,
+            views_per_pallet: Optional[int] = 30,
+            passes_per_pallet: Optional[int] = 5,
+            views_per_pass: Optional[int] = 6,
     ):
         super().__init__()
 
@@ -46,7 +50,11 @@ class MC2CNN(LightningModule):
         self.val_mean_precision_recall = MeanAveragePrecision(class_metrics=True)
         self.test_mean_precision_recall = MeanAveragePrecision(class_metrics=True)
 
-        self.test_pallet_level_precision_recall = PalletLevelPrecisionRecall("test_truth_table")
+        self.test_pallet_level_precision_recall = PalletLevelPrecisionRecall(file_name="test_truth_table",
+                                                                             passes_per_pallet=passes_per_pallet,
+                                                                             views_per_pass=views_per_pass,
+                                                                             pallet_manipulations=pallet_manipulations,
+                                                                             views_per_pallet=views_per_pallet)
 
         self.detector = _fasterrcnn_resnet_fpn(resnet_name=resnet_name, pretrained=True,
                                                box_nms_threshold=box_nms_threshold, max_image_size=max_image_size)
