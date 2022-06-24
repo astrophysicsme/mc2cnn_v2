@@ -21,6 +21,8 @@ if __name__ == '__main__':
     mc2cnn_data_batch_size: int = 2
 
     mc2cnn_pallet_manipulations: int = 4
+    mc2cnn_pallet_manipulations_identifiers: tuple = ("", "hw", "vc", "vchw")
+
     mc2cnn_views_per_pallet: int = 30
     mc2cnn_passes_per_pallet: int = 5
     mc2cnn_views_per_pass: int = 6
@@ -57,7 +59,8 @@ if __name__ == '__main__':
                     batch_size=mc2cnn_data_batch_size, box_nms_threshold=mc2cnn_box_nms_threshold,
                     weight_decay=mc2cnn_weight_decay, momentum=mc2cnn_momentum, max_image_size=mc2cnn_max_image_size,
                     views_per_pallet=mc2cnn_views_per_pallet, pallet_manipulations=mc2cnn_pallet_manipulations,
-                    passes_per_pallet=mc2cnn_passes_per_pallet, views_per_pass=mc2cnn_views_per_pass)
+                    passes_per_pallet=mc2cnn_passes_per_pallet, views_per_pass=mc2cnn_views_per_pass,
+                    pallet_manipulations_identifiers=mc2cnn_pallet_manipulations_identifiers)
 
     if tensorboard_logger_version is None:
         logger = TensorBoardLogger(save_dir=tensorboard_logger_save_dir)
