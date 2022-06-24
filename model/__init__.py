@@ -119,7 +119,7 @@ class MC2CNN(LightningModule):
         minimized_pred_boxes = self._minimize_predicted_boxes(pred_boxes)
 
         if pallet_level_precision_recall:
-            pallet_level_precision_recall.update(image_file_names, targets, labels, minimized_pred_boxes)
+            pallet_level_precision_recall.update(image_file_names, targets, minimized_pred_boxes)
 
         if mean_precision_recall:
             mean_precision_recall.update(minimized_pred_boxes, targets)
