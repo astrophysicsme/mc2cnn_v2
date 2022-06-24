@@ -24,9 +24,9 @@ class AstroPallet(Dataset):
         # Dictionary: target coco_annotation file for an image
         coco_annotation = coco.loadAnns(ann_ids)
         # path for input image
-        path = coco.loadImgs(img_id)[0]["file_name"]
+        image_file_name = coco.loadImgs(img_id)[0]["file_name"]
         # open the input image
-        img = Image.open(join(self.root, path)).convert("RGB")
+        img = Image.open(join(self.root, image_file_name)).convert("RGB")
         # number of objects in the image
         num_objs = len(coco_annotation)
 
@@ -66,7 +66,7 @@ class AstroPallet(Dataset):
         # Annotation is in dictionary format
         # metadata = {"boxes": ann, "labels": labels, "image_id": img_id, "area": areas, "iscrowd": iscrowd}
 
-        return img, ann, labels
+        return img, ann, labels, image_file_name
 
     def __len__(self):
         return len(self.ids)

@@ -11,8 +11,8 @@ from callbacks import callbacks
 
 if __name__ == '__main__':
     # TODO: place the below configurations in config files. probably use hydra
-    max_pallets_to_load: int = 0  # use int <= 0 to load all available pallets
-    run_training: bool = True
+    max_pallets_to_load: int = 1  # use int <= 0 to load all available pallets
+    run_training: bool = False
     run_testing: bool = True
 
     mc2cnn_data_directory: str = "datasets"

@@ -12,12 +12,14 @@ def collate_fn(batch):
     images = list()
     targets = list()
     labels = list()
+    image_file_names = list()
 
-    for i, t, l in batch:
+    for i, t, l, ifn in batch:
         images.append(i)
         targets.append(t)
         labels.append(l)
+        image_file_names.append(ifn)
 
     images = torch.stack(images, dim=0)
 
-    return images, targets, labels
+    return images, targets, labels, image_file_names
