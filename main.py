@@ -21,7 +21,7 @@ if __name__ == '__main__':
     mc2cnn_data_batch_size: int = 2
 
     mc2cnn_pallet_manipulations: int = 4
-    mc2cnn_pallet_manipulations_identifiers: tuple = ("", "hw", "vc", "vchw")
+    mc2cnn_pallet_manipulations_identifiers: tuple = ("_vchw.", "_hw.", "_vc.", "")
 
     mc2cnn_views_per_pallet: int = 30
     mc2cnn_passes_per_pallet: int = 5

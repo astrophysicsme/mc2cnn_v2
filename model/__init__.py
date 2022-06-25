@@ -31,7 +31,7 @@ class MC2CNN(LightningModule):
             box_nms_threshold: Optional[float] = 0.5,
             max_image_size: Optional[int] = 1333,
             pallet_manipulations: Optional[int] = 4,
-            pallet_manipulations_identifiers: Optional[tuple] = ("", "hw", "vc", "vchw"),
+            pallet_manipulations_identifiers: Optional[tuple] = ("_vchw.", "_hw.", "_vc.", ""),
             views_per_pallet: Optional[int] = 30,
             passes_per_pallet: Optional[int] = 5,
             views_per_pass: Optional[int] = 6,
