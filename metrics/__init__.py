@@ -1,9 +1,12 @@
 import os
 import shutil
 import time
+from ast import literal_eval
 
 import pandas as pd
+import numpy as np
 from typing import Optional
+from torchvision.ops import nms
 
 
 class PalletLevelPrecisionRecall:
@@ -16,11 +19,12 @@ class PalletLevelPrecisionRecall:
             views_per_pallet: Optional[int] = 30,
             passes_per_pallet: Optional[int] = 5,
             views_per_pass: Optional[int] = 6,
+            detection_threshold: Optional[float] = 0.75,
     ):
-        self.log_dir = log_dir
-        self.file_name = file_name
-        self.pr_path, self.pr_full_path = self._handle_existing_file(log_dir=self.log_dir, file_name=self.file_name)
-        self.pr_columns = [
+        self._log_dir = log_dir
+        self._file_name = file_name
+        self._pr_path, self._pr_full_path = self._handle_existing_file(log_dir=self._log_dir, file_name=self._file_name)
+        self._pr_columns = [
             "image_file_name",
             "gt_boxes",
             "gt_labels",
@@ -29,17 +33,19 @@ class PalletLevelPrecisionRecall:
             "predicted_scores"
         ]
 
-        self.tt_path, self.tt_full_path = self._handle_existing_file(log_dir=self.log_dir, file_name="truth_table")
-        self.tt_columns = [
+        self._tt_path, self._tt_full_path = self._handle_existing_file(log_dir=self._log_dir, file_name="truth_table")
+        self._tt_columns = [
             "metric name",
             "metric value"
         ]
 
-        self.pallet_manipulations = pallet_manipulations
-        self.views_per_pallet = views_per_pallet
-        self.passes_per_pallet = passes_per_pallet
-        self.views_per_pass = views_per_pass
-        self.pallet_manipulations_identifiers = pallet_manipulations_identifiers
+        self._pallet_manipulations = pallet_manipulations
+        self._views_per_pallet = views_per_pallet
+        self._passes_per_pallet = passes_per_pallet
+        self._views_per_pass = views_per_pass
+        self._pallet_manipulations_identifiers = pallet_manipulations_identifiers
+
+        self._detection_threshold = detection_threshold
 
     def update(
             self,
@@ -60,33 +66,113 @@ class PalletLevelPrecisionRecall:
                 minimized_pred_boxes[i]["scores"].tolist()
             ])
 
-        df = pd.DataFrame(data=data, columns=self.pr_columns)
-        if os.path.exists(self.pr_full_path):
-            original_df = pd.read_csv(self.pr_full_path)
+        df = pd.DataFrame(data=data, columns=self._pr_columns)
+        if os.path.exists(self._pr_full_path):
+            original_df = pd.read_csv(self._pr_full_path)
             df = pd.concat([original_df, df], ignore_index=True)
 
-        df.to_csv(self.pr_full_path, index=False)
+        df.to_csv(self._pr_full_path, index=False)
 
     def compute(self):
-        if os.path.exists(self.pr_full_path):
-            chunk_size = self.pallet_manipulations * self.views_per_pallet
+        if os.path.exists(self._pr_full_path):
+            chunk_size = self._pallet_manipulations * self._views_per_pallet
 
-            assert self.pallet_manipulations == len(self.pallet_manipulations_identifiers)
+            assert self._pallet_manipulations == len(self._pallet_manipulations_identifiers)
 
-            for chunk in pd.read_csv(self.pr_full_path, chunksize=chunk_size):
+            for chunk in pd.read_csv(self._pr_full_path, converters={
+                "gt_boxes": literal_eval,
+                "gt_labels": literal_eval,
+                "predicted_boxes": literal_eval,
+                "predicted_labels": literal_eval,
+                "predicted_scores": literal_eval,
+            }, chunksize=chunk_size):
                 # separate all the different manipulations
-                pallets_sorted_by_manipulation = list()
-                for identifier in self.pallet_manipulations_identifiers:
+                pallets_grouped_by_manipulation = list()
+                for identifier in self._pallet_manipulations_identifiers:
                     if identifier != "":
-                        sub = chunk["image_file_name"].str.contains(identifier)
-                        pallets_sorted_by_manipulation.append(chunk[sub])
+                        sub_chunk = chunk["image_file_name"].str.contains(identifier)
+                        # order the rows according to the pallets names. pallets are ordered alphabetically not by view
+                        pallets_grouped_by_manipulation.append(self._sort_df_by_map(chunk[sub_chunk]))
                         # drop all extracted rows from the main pd chunk
-                        chunk = chunk[sub == False]
+                        chunk = chunk[sub_chunk == False]
                     else:
-                        pallets_sorted_by_manipulation.append(chunk)
-                # order the rows according to the pallets names. pallets are ordered alphabetically not by view
+                        # order the rows according to the pallets names. pallets are ordered alphabetically not by view
+                        pallets_grouped_by_manipulation.append(self._sort_df_by_map(chunk))
+
                 # loop over the views from the same pass
-                #   keep the predicted boxes, label and scores, that overlap in 3 consecutive views
+                start_position = 0
+                for pallet in pallets_grouped_by_manipulation:
+                    #   keep the predicted boxes, label and scores, that overlap in 3 consecutive views
+                    for i in range(start_position, self._views_per_pallet, self._views_per_pass):
+                        next_position = i + self._views_per_pass
+                        pass_views = pallet[i:next_position]
+
+                        pass_boxes = {}
+
+                        for box in self._check_three_consecutive_views(pass_views.iloc[0], pass_views.iloc[1],
+                                                                       pass_views.iloc[2]):
+                            if pass_views.iloc[0]["image_file_name"] not in pass_boxes.keys():
+                                pass_boxes[pass_views.iloc[0]["image_file_name"]] = []
+                            pass_boxes[pass_views.iloc[0]["image_file_name"]].append([box])
+                        for box in self._check_three_consecutive_views(pass_views.iloc[1], pass_views.iloc[0],
+                                                                       pass_views.iloc[2]):
+                            if pass_views.iloc[1]["image_file_name"] not in pass_boxes.keys():
+                                pass_boxes[pass_views.iloc[1]["image_file_name"]] = []
+                            pass_boxes[pass_views.iloc[1]["image_file_name"]].append([box])
+                        for box in self._check_three_consecutive_views(pass_views.iloc[1], pass_views.iloc[2],
+                                                                       pass_views.iloc[3]):
+                            if pass_views.iloc[1]["image_file_name"] not in pass_boxes.keys():
+                                pass_boxes[pass_views.iloc[1]["image_file_name"]] = []
+                            pass_boxes[pass_views.iloc[1]["image_file_name"]].append([box])
+                        for box in self._check_three_consecutive_views(pass_views.iloc[2], pass_views.iloc[0],
+                                                                       pass_views.iloc[1]):
+                            if pass_views.iloc[2]["image_file_name"] not in pass_boxes.keys():
+                                pass_boxes[pass_views.iloc[2]["image_file_name"]] = []
+                            pass_boxes[pass_views.iloc[2]["image_file_name"]].append([box])
+                        for box in self._check_three_consecutive_views(pass_views.iloc[2], pass_views.iloc[1],
+                                                                       pass_views.iloc[3]):
+                            if pass_views.iloc[2]["image_file_name"] not in pass_boxes.keys():
+                                pass_boxes[pass_views.iloc[2]["image_file_name"]] = []
+                            pass_boxes[pass_views.iloc[2]["image_file_name"]].append([box])
+                        for box in self._check_three_consecutive_views(pass_views.iloc[2], pass_views.iloc[3],
+                                                                       pass_views.iloc[4]):
+                            if pass_views.iloc[2]["image_file_name"] not in pass_boxes.keys():
+                                pass_boxes[pass_views.iloc[2]["image_file_name"]] = []
+                            pass_boxes[pass_views.iloc[2]["image_file_name"]].append([box])
+                        for box in self._check_three_consecutive_views(pass_views.iloc[3], pass_views.iloc[1],
+                                                                       pass_views.iloc[2]):
+                            if pass_views.iloc[3]["image_file_name"] not in pass_boxes.keys():
+                                pass_boxes[pass_views.iloc[3]["image_file_name"]] = []
+                            pass_boxes[pass_views.iloc[3]["image_file_name"]].append([box])
+                        for box in self._check_three_consecutive_views(pass_views.iloc[3], pass_views.iloc[2],
+                                                                       pass_views.iloc[4]):
+                            if pass_views.iloc[3]["image_file_name"] not in pass_boxes.keys():
+                                pass_boxes[pass_views.iloc[3]["image_file_name"]] = []
+                            pass_boxes[pass_views.iloc[3]["image_file_name"]].append([box])
+                        for box in self._check_three_consecutive_views(pass_views.iloc[3], pass_views.iloc[4],
+                                                                       pass_views.iloc[5]):
+                            if pass_views.iloc[3]["image_file_name"] not in pass_boxes.keys():
+                                pass_boxes[pass_views.iloc[3]["image_file_name"]] = []
+                            pass_boxes[pass_views.iloc[3]["image_file_name"]].append([box])
+                        for box in self._check_three_consecutive_views(pass_views.iloc[4], pass_views.iloc[3],
+                                                                       pass_views.iloc[2]):
+                            if pass_views.iloc[4]["image_file_name"] not in pass_boxes.keys():
+                                pass_boxes[pass_views.iloc[4]["image_file_name"]] = []
+                            pass_boxes[pass_views.iloc[4]["image_file_name"]].append([box])
+                        for box in self._check_three_consecutive_views(pass_views.iloc[4], pass_views.iloc[3],
+                                                                       pass_views.iloc[5]):
+                            if pass_views.iloc[4]["image_file_name"] not in pass_boxes.keys():
+                                pass_boxes[pass_views.iloc[4]["image_file_name"]] = []
+                            pass_boxes[pass_views.iloc[4]["image_file_name"]].append([box])
+                        for box in self._check_three_consecutive_views(pass_views.iloc[5], pass_views.iloc[3],
+                                                                       pass_views.iloc[4]):
+                            if pass_views.iloc[5]["image_file_name"] not in pass_boxes.keys():
+                                pass_boxes[pass_views.iloc[5]["image_file_name"]] = []
+                            pass_boxes[pass_views.iloc[5]["image_file_name"]].append([box])
+
+                        iou_thr = 0.1
+                        threats_detected = []
+
                 #   keep the ground truth boxes and labels, that overlap in 3 consecutive views
                 #   calculate iou between the pass predicted boxes and the ground truth boxes
                 #       while checking the labels of these boxes
@@ -101,17 +187,24 @@ class PalletLevelPrecisionRecall:
             }
 
             final_result_for_pd_df = {
-                self.tt_columns[0]: list(final_result.keys()),
-                self.tt_columns[1]: list(final_result.values())
+                self._tt_columns[0]: list(final_result.keys()),
+                self._tt_columns[1]: list(final_result.values())
             }
 
-            tt_result_df = pd.DataFrame(data=final_result_for_pd_df, columns=self.tt_columns)
-            tt_result_df.to_csv(self.tt_full_path, index=False)
+            tt_result_df = pd.DataFrame(data=final_result_for_pd_df, columns=self._tt_columns)
+            tt_result_df.to_csv(self._tt_full_path, index=False)
 
             return final_result
 
         else:
             raise FileNotFoundError
+
+    @staticmethod
+    def _sort_df_by_map(df: pd.DataFrame):
+        index_map = [0, 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 3, 4, 5,
+                     6, 7, 8, 9]
+
+        return df.set_index(pd.Index(index_map)).sort_index()
 
     @staticmethod
     def _handle_existing_file(log_dir: str, file_name: str):
@@ -127,3 +220,104 @@ class PalletLevelPrecisionRecall:
             os.remove(full_path)
 
         return path, full_path
+
+    @staticmethod
+    def _calc_iou(gt_bbox, pred_bbox):
+        """
+        This function takes the predicted bounding box and ground truth bounding box and
+        return the IoU ratio
+        """
+        x_top_left_gt, y_top_left_gt, x_bottom_right_gt, y_bottom_right_gt = gt_bbox
+        x_top_left_p, y_top_left_p, x_bottom_right_p, y_bottom_right_p = pred_bbox
+
+        if (x_top_left_gt > x_bottom_right_gt) or (y_top_left_gt > y_bottom_right_gt):
+            raise AssertionError("Ground Truth Bounding Box is not correct")
+        if (x_top_left_p > x_bottom_right_p) or (y_top_left_p > y_bottom_right_p):
+            raise AssertionError("Predicted Bounding Box is not correct", x_top_left_p, x_bottom_right_p, y_top_left_p,
+                                 y_bottom_right_gt)
+
+        # if the GT bbox and predicted BBox do not overlap then iou=0
+        # If bottom right of x-coordinate GT bbox is less than or above the top left of x coordinate of the predicted
+        # BBox
+        if x_bottom_right_gt < x_top_left_p:
+            return 0.0
+        # If bottom right of y-coordinate GT bbox is less than or above the top left of y coordinate of the predicted
+        # BBox
+        if y_bottom_right_gt < y_top_left_p:
+            return 0.0
+        # If bottom right of x-coordinate GT bbox is greater than or below the bottom right of x coordinate of the
+        # predicted BBox
+        if x_top_left_gt > x_bottom_right_p:
+            return 0.0
+        # If bottom right of y-coordinate GT bbox is greater than or below the bottom right of y coordinate of the
+        # predicted BBox
+        if y_top_left_gt > y_bottom_right_p:
+            return 0.0
+
+        gt_bbox_area = (x_bottom_right_gt - x_top_left_gt + 1) * (y_bottom_right_gt - y_top_left_gt + 1)
+        pred_bbox_area = (x_bottom_right_p - x_top_left_p + 1) * (y_bottom_right_p - y_top_left_p + 1)
+
+        x_top_left = np.max([x_top_left_gt, x_top_left_p])
+        y_top_left = np.max([y_top_left_gt, y_top_left_p])
+        x_bottom_right = np.min([x_bottom_right_gt, x_bottom_right_p])
+        y_bottom_right = np.min([y_bottom_right_gt, y_bottom_right_p])
+
+        intersection_area = (x_bottom_right - x_top_left + 1) * (y_bottom_right - y_top_left + 1)
+
+        union_area = (gt_bbox_area + pred_bbox_area - intersection_area)
+
+        return intersection_area / union_area
+
+    def _get_vote(self, coordinates, next_view, iou_threshold: float = 0.7):
+        local_vote = 0
+
+        for x in range(len(next_view["predicted_boxes"])):
+            next_box = next_view["predicted_boxes"][x]
+            next_coordinates = [
+                int(next_box[0]),
+                int(next_box[1]),
+                int(next_box[2]),
+                int(next_box[3])
+            ]
+            voting_iou = self._calc_iou(coordinates, next_coordinates)
+
+            if voting_iou >= iou_threshold:
+                local_vote += 1
+
+        return local_vote
+
+    def _check_three_consecutive_views(self, current_view, first_view, second_view):
+        picked_boxes = []
+        for t in range(len(current_view["predicted_boxes"])):
+            vote = 0
+            current_box = current_view["predicted_boxes"][t]
+            current_coordinates = [
+                int(current_box[0]),
+                int(current_box[1]),
+                int(current_box[2]),
+                int(current_box[3])
+            ]
+
+            if self._get_vote(current_coordinates, first_view) > 0:
+                vote += 1
+
+            if self._get_vote(current_coordinates, second_view) > 0:
+                vote += 1
+
+            if vote == 2:
+                picked_boxes.append(current_box)
+
+        return picked_boxes
+
+    @staticmethod
+    def _merge_bounding_boxes(bounding_boxes):
+        if len(bounding_boxes) == 0:
+            return [], []
+        bboxes = np.array(bounding_boxes)
+
+        min_x1, min_y1 = np.minimum([bboxes[0][0], bboxes[0][1]], [bboxes[1][0], bboxes[1][1]])
+        max_x2, max_y2 = np.maximum([bboxes[0][2], bboxes[0][3]], [bboxes[1][2], bboxes[1][3]])
+
+        average_score = (bboxes[0][4] + bboxes[1][4]) / 2
+
+        return [int(min_x1), int(min_y1), int(max_x2), int(max_y2), float(average_score)]
