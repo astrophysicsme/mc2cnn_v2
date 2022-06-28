@@ -74,18 +74,19 @@ class PalletLevelPrecisionRecall:
         df.to_csv(self._pr_full_path, index=False)
 
     def compute(self):
-        if os.path.exists(self._pr_full_path):
-            chunk_size = self._pallet_manipulations * self._views_per_pallet
-
+        if not os.path.exists(self._pr_full_path):
+            raise FileNotFoundError
+        else:
             assert self._pallet_manipulations == len(self._pallet_manipulations_identifiers)
 
+            pass_level_truth_table = []
             for chunk in pd.read_csv(self._pr_full_path, converters={
                 "gt_boxes": literal_eval,
                 "gt_labels": literal_eval,
                 "predicted_boxes": literal_eval,
                 "predicted_labels": literal_eval,
                 "predicted_scores": literal_eval,
-            }, chunksize=chunk_size):
+            }, chunksize=self._pallet_manipulations * self._views_per_pallet):
                 # separate all the different manipulations
                 pallets_grouped_by_manipulation = list()
                 for identifier in self._pallet_manipulations_identifiers:
@@ -105,73 +106,33 @@ class PalletLevelPrecisionRecall:
                     #   keep the predicted boxes, label and scores, that overlap in 3 consecutive views
                     for i in range(start_position, self._views_per_pallet, self._views_per_pass):
                         next_position = i + self._views_per_pass
+
                         pass_views = pallet[i:next_position]
 
-                        pass_boxes = {}
+                        view_range = f"{i} to {next_position}"
+                        file_name, manipulation_prefix = self._extract_file_name_with_manipulation_prefix(
+                            pass_views.iloc[0]["image_file_name"])
 
-                        for box in self._check_three_consecutive_views(pass_views.iloc[0], pass_views.iloc[1],
-                                                                       pass_views.iloc[2]):
-                            if pass_views.iloc[0]["image_file_name"] not in pass_boxes.keys():
-                                pass_boxes[pass_views.iloc[0]["image_file_name"]] = []
-                            pass_boxes[pass_views.iloc[0]["image_file_name"]].append([box])
-                        for box in self._check_three_consecutive_views(pass_views.iloc[1], pass_views.iloc[0],
-                                                                       pass_views.iloc[2]):
-                            if pass_views.iloc[1]["image_file_name"] not in pass_boxes.keys():
-                                pass_boxes[pass_views.iloc[1]["image_file_name"]] = []
-                            pass_boxes[pass_views.iloc[1]["image_file_name"]].append([box])
-                        for box in self._check_three_consecutive_views(pass_views.iloc[1], pass_views.iloc[2],
-                                                                       pass_views.iloc[3]):
-                            if pass_views.iloc[1]["image_file_name"] not in pass_boxes.keys():
-                                pass_boxes[pass_views.iloc[1]["image_file_name"]] = []
-                            pass_boxes[pass_views.iloc[1]["image_file_name"]].append([box])
-                        for box in self._check_three_consecutive_views(pass_views.iloc[2], pass_views.iloc[0],
-                                                                       pass_views.iloc[1]):
-                            if pass_views.iloc[2]["image_file_name"] not in pass_boxes.keys():
-                                pass_boxes[pass_views.iloc[2]["image_file_name"]] = []
-                            pass_boxes[pass_views.iloc[2]["image_file_name"]].append([box])
-                        for box in self._check_three_consecutive_views(pass_views.iloc[2], pass_views.iloc[1],
-                                                                       pass_views.iloc[3]):
-                            if pass_views.iloc[2]["image_file_name"] not in pass_boxes.keys():
-                                pass_boxes[pass_views.iloc[2]["image_file_name"]] = []
-                            pass_boxes[pass_views.iloc[2]["image_file_name"]].append([box])
-                        for box in self._check_three_consecutive_views(pass_views.iloc[2], pass_views.iloc[3],
-                                                                       pass_views.iloc[4]):
-                            if pass_views.iloc[2]["image_file_name"] not in pass_boxes.keys():
-                                pass_boxes[pass_views.iloc[2]["image_file_name"]] = []
-                            pass_boxes[pass_views.iloc[2]["image_file_name"]].append([box])
-                        for box in self._check_three_consecutive_views(pass_views.iloc[3], pass_views.iloc[1],
-                                                                       pass_views.iloc[2]):
-                            if pass_views.iloc[3]["image_file_name"] not in pass_boxes.keys():
-                                pass_boxes[pass_views.iloc[3]["image_file_name"]] = []
-                            pass_boxes[pass_views.iloc[3]["image_file_name"]].append([box])
-                        for box in self._check_three_consecutive_views(pass_views.iloc[3], pass_views.iloc[2],
-                                                                       pass_views.iloc[4]):
-                            if pass_views.iloc[3]["image_file_name"] not in pass_boxes.keys():
-                                pass_boxes[pass_views.iloc[3]["image_file_name"]] = []
-                            pass_boxes[pass_views.iloc[3]["image_file_name"]].append([box])
-                        for box in self._check_three_consecutive_views(pass_views.iloc[3], pass_views.iloc[4],
-                                                                       pass_views.iloc[5]):
-                            if pass_views.iloc[3]["image_file_name"] not in pass_boxes.keys():
-                                pass_boxes[pass_views.iloc[3]["image_file_name"]] = []
-                            pass_boxes[pass_views.iloc[3]["image_file_name"]].append([box])
-                        for box in self._check_three_consecutive_views(pass_views.iloc[4], pass_views.iloc[3],
-                                                                       pass_views.iloc[2]):
-                            if pass_views.iloc[4]["image_file_name"] not in pass_boxes.keys():
-                                pass_boxes[pass_views.iloc[4]["image_file_name"]] = []
-                            pass_boxes[pass_views.iloc[4]["image_file_name"]].append([box])
-                        for box in self._check_three_consecutive_views(pass_views.iloc[4], pass_views.iloc[3],
-                                                                       pass_views.iloc[5]):
-                            if pass_views.iloc[4]["image_file_name"] not in pass_boxes.keys():
-                                pass_boxes[pass_views.iloc[4]["image_file_name"]] = []
-                            pass_boxes[pass_views.iloc[4]["image_file_name"]].append([box])
-                        for box in self._check_three_consecutive_views(pass_views.iloc[5], pass_views.iloc[3],
-                                                                       pass_views.iloc[4]):
-                            if pass_views.iloc[5]["image_file_name"] not in pass_boxes.keys():
-                                pass_boxes[pass_views.iloc[5]["image_file_name"]] = []
-                            pass_boxes[pass_views.iloc[5]["image_file_name"]].append([box])
+                        # TODO: add support for the labels and scores when available
+                        pred_boxes, pred_labels, pred_scores = self._convert_single_view_to_pass_view_truth_table(
+                            pass_views, column_name="predicted_boxes", is_ground_truth=False)
+                        gt_boxes, gt_labels = self._convert_single_view_to_pass_view_truth_table(pass_views,
+                                                                                                 column_name="gt_boxes",
+                                                                                                 is_ground_truth=True)
 
                         iou_thr = 0.1
                         threats_detected = []
+
+                        pass_level_truth_table.append({
+                            "image_file_name": file_name,
+                            "manipulation": manipulation_prefix,
+                            "views": view_range,
+                            "gt_boxes": gt_boxes,
+                            "gt_labels": gt_labels,
+                            "predicted_boxes": pred_boxes,
+                            "predicted_labels": pred_labels,
+                            "predicted_scores": pred_scores,
+                        })
 
                 #   keep the ground truth boxes and labels, that overlap in 3 consecutive views
                 #   calculate iou between the pass predicted boxes and the ground truth boxes
@@ -196,8 +157,79 @@ class PalletLevelPrecisionRecall:
 
             return final_result
 
+    def _convert_single_view_to_pass_view_truth_table(self, pass_views, column_name, is_ground_truth=False):
+        pass_boxes = []
+        pass_labels = []
+        if not is_ground_truth:
+            pass_scores = []
+
+        for box, label, score in self._check_three_consecutive_views(pass_views.iloc[0], pass_views.iloc[1],
+                                                                     pass_views.iloc[2], column_name, is_ground_truth):
+            if box not in pass_boxes:
+                pass_boxes.append(box)
+        for box, label, score in self._check_three_consecutive_views(pass_views.iloc[1], pass_views.iloc[0],
+                                                                     pass_views.iloc[2], column_name, is_ground_truth):
+            if box not in pass_boxes:
+                pass_boxes.append(box)
+        for box, label, score in self._check_three_consecutive_views(pass_views.iloc[1], pass_views.iloc[2],
+                                                                     pass_views.iloc[3], column_name, is_ground_truth):
+            if box not in pass_boxes:
+                pass_boxes.append(box)
+        for box, label, score in self._check_three_consecutive_views(pass_views.iloc[2], pass_views.iloc[0],
+                                                                     pass_views.iloc[1], column_name, is_ground_truth):
+            if box not in pass_boxes:
+                pass_boxes.append(box)
+        for box, label, score in self._check_three_consecutive_views(pass_views.iloc[2], pass_views.iloc[1],
+                                                                     pass_views.iloc[3], column_name, is_ground_truth):
+            if box not in pass_boxes:
+                pass_boxes.append(box)
+        for box, label, score in self._check_three_consecutive_views(pass_views.iloc[2], pass_views.iloc[3],
+                                                                     pass_views.iloc[4], column_name, is_ground_truth):
+            if box not in pass_boxes:
+                pass_boxes.append(box)
+        for box, label, score in self._check_three_consecutive_views(pass_views.iloc[3], pass_views.iloc[1],
+                                                                     pass_views.iloc[2], column_name, is_ground_truth):
+            if box not in pass_boxes:
+                pass_boxes.append(box)
+        for box, label, score in self._check_three_consecutive_views(pass_views.iloc[3], pass_views.iloc[2],
+                                                                     pass_views.iloc[4], column_name, is_ground_truth):
+            if box not in pass_boxes:
+                pass_boxes.append(box)
+        for box, label, score in self._check_three_consecutive_views(pass_views.iloc[3], pass_views.iloc[4],
+                                                                     pass_views.iloc[5], column_name, is_ground_truth):
+            if box not in pass_boxes:
+                pass_boxes.append(box)
+        for box, label, score in self._check_three_consecutive_views(pass_views.iloc[4], pass_views.iloc[3],
+                                                                     pass_views.iloc[2], column_name, is_ground_truth):
+            if box not in pass_boxes:
+                pass_boxes.append(box)
+        for box, label, score in self._check_three_consecutive_views(pass_views.iloc[4], pass_views.iloc[3],
+                                                                     pass_views.iloc[5], column_name, is_ground_truth):
+            if box not in pass_boxes:
+                pass_boxes.append(box)
+        for box, label, score in self._check_three_consecutive_views(pass_views.iloc[5], pass_views.iloc[3],
+                                                                     pass_views.iloc[4], column_name, is_ground_truth):
+            if box not in pass_boxes:
+                pass_boxes.append(box)
+
+        if not is_ground_truth:
+            return pass_boxes, pass_labels, pass_scores
         else:
-            raise FileNotFoundError
+            return pass_boxes, pass_labels
+
+    @staticmethod
+    def _extract_file_name_with_manipulation_prefix(full_file_name: str):
+        file_name = full_file_name[:14]
+        if "vchw" in full_file_name:
+            manipulation_prefix = "vchw"
+        elif "vc" in full_file_name:
+            manipulation_prefix = "vc"
+        elif "hw" in full_file_name:
+            manipulation_prefix = "hw"
+        else:
+            manipulation_prefix = ""
+
+        return file_name, manipulation_prefix
 
     @staticmethod
     def _sort_df_by_map(df: pd.DataFrame):
@@ -268,11 +300,11 @@ class PalletLevelPrecisionRecall:
 
         return intersection_area / union_area
 
-    def _get_vote(self, coordinates, next_view, iou_threshold: float = 0.7):
+    def _get_vote(self, coordinates, next_view, column_name, iou_threshold: float = 0.7):
         local_vote = 0
 
-        for x in range(len(next_view["predicted_boxes"])):
-            next_box = next_view["predicted_boxes"][x]
+        for x in range(len(next_view[column_name])):
+            next_box = next_view[column_name][x]
             next_coordinates = [
                 int(next_box[0]),
                 int(next_box[1]),
@@ -286,11 +318,14 @@ class PalletLevelPrecisionRecall:
 
         return local_vote
 
-    def _check_three_consecutive_views(self, current_view, first_view, second_view):
+    def _check_three_consecutive_views(self, current_view, first_view, second_view, column_name, is_ground_truth: bool):
         picked_boxes = []
-        for t in range(len(current_view["predicted_boxes"])):
+        picked_labels = []
+        picked_scores = []
+        # TODO: add labels and scores to the voting
+        for t in range(len(current_view[column_name])):
             vote = 0
-            current_box = current_view["predicted_boxes"][t]
+            current_box = current_view[column_name][t]
             current_coordinates = [
                 int(current_box[0]),
                 int(current_box[1]),
@@ -298,16 +333,14 @@ class PalletLevelPrecisionRecall:
                 int(current_box[3])
             ]
 
-            if self._get_vote(current_coordinates, first_view) > 0:
-                vote += 1
-
-            if self._get_vote(current_coordinates, second_view) > 0:
-                vote += 1
+            for view in (first_view, second_view):
+                if self._get_vote(current_coordinates, view, column_name=column_name) > 0:
+                    vote += 1
 
             if vote == 2:
                 picked_boxes.append(current_box)
 
-        return picked_boxes
+        return picked_boxes, picked_labels, picked_scores
 
     @staticmethod
     def _merge_bounding_boxes(bounding_boxes):
