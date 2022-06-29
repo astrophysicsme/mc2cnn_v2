@@ -155,7 +155,7 @@ class MC2CNN(LightningModule):
                     ls.append(l_l[s])
                     ss.append(s_l[s])
 
-            bs = torch.tensor(bs, dtype=torch.float32, device=self.device)
+            bs = torch.tensor(bs, dtype=torch.int64, device=self.device)
             ls = torch.tensor(ls, dtype=torch.int64, device=self.device)
             ss = torch.tensor(ss, dtype=torch.float32, device=self.device)
 
