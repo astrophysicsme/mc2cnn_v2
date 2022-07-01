@@ -7,6 +7,7 @@ datasets
 lightning_logs
 logs
 comet_logs
+astro_metrics_logs
 
 venv
 

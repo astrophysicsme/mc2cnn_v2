@@ -16,6 +16,8 @@ from torchvision.models.detection.roi_heads import fastrcnn_loss
 from torchvision.models.detection.rpn import concat_box_prediction_layers
 from torchvision.ops import box_iou
 
+from metrics import PalletLevelPrecisionRecall
+
 
 class MC2CNN(LightningModule):
     def __init__(
@@ -27,7 +29,12 @@ class MC2CNN(LightningModule):
             weight_decay: Optional[float] = 0.5e-4,
             momentum: Optional[float] = 0.9,
             box_nms_threshold: Optional[float] = 0.5,
-            max_image_size: Optional[int] = 1333
+            max_image_size: Optional[int] = 1333,
+            pallet_manipulations: Optional[int] = 4,
+            pallet_manipulations_identifiers: Optional[tuple] = ("_vchw.", "_hw.", "_vc.", ""),
+            views_per_pallet: Optional[int] = 30,
+            passes_per_pallet: Optional[int] = 5,
+            views_per_pass: Optional[int] = 6,
     ):
         super().__init__()
 
@@ -43,6 +50,14 @@ class MC2CNN(LightningModule):
 
         self.val_mean_precision_recall = MeanAveragePrecision(class_metrics=True)
         self.test_mean_precision_recall = MeanAveragePrecision(class_metrics=True)
+
+        self.test_pallet_level_precision_recall = PalletLevelPrecisionRecall(
+            passes_per_pallet=passes_per_pallet,
+            views_per_pass=views_per_pass,
+            pallet_manipulations=pallet_manipulations,
+            pallet_manipulations_identifiers=pallet_manipulations_identifiers,
+            views_per_pallet=views_per_pallet,
+        )
 
         self.detector = _fasterrcnn_resnet_fpn(resnet_name=resnet_name, pretrained=True,
                                                box_nms_threshold=box_nms_threshold, max_image_size=max_image_size)
@@ -82,11 +97,14 @@ class MC2CNN(LightningModule):
         self.val_mean_precision_recall.reset()
 
     def test_step(self, batch, batch_idx):
-        accuracy, loss = self._evaluate(batch, self.test_mean_precision_recall, prefix="test")
+        accuracy, loss = self._evaluate(batch, self.test_mean_precision_recall,
+                                        pallet_level_precision_recall=self.test_pallet_level_precision_recall,
+                                        prefix="test")
         return {"test_accuracy": accuracy, "test_loss": loss}
 
     def test_epoch_end(self, test_step_outputs):
         test_mean_precision_recall = {"test_" + k: v for k, v in self.test_mean_precision_recall.compute().items()}
+        self.log_dict(self.test_pallet_level_precision_recall.compute(), sync_dist=True)
         self.log_dict(test_mean_precision_recall, sync_dist=True)
         self.test_mean_precision_recall.reset()
 
@@ -94,9 +112,10 @@ class MC2CNN(LightningModule):
             self,
             batch,
             mean_precision_recall: Union[MeanAveragePrecision, bool],
+            pallet_level_precision_recall: Optional[Union[PalletLevelPrecisionRecall, bool]] = False,
             prefix: Literal["train", "val", "test"] = "val"
     ):
-        images, boxes, labels = batch
+        images, boxes, labels, image_file_names = batch
         targets = self._convert_gt_annotations_to_targets(boxes, labels)
 
         loss_dict, pred_boxes = self._eval_forward(self.detector, images, targets)
@@ -108,36 +127,44 @@ class MC2CNN(LightningModule):
         loss = sum(loss for loss in loss_dict.values())
         self.logger.experiment.add_scalars('loss', {f"{prefix}": loss}, self.global_step)
 
+        minimized_pred_boxes = self._minimize_predicted_boxes(pred_boxes)
+
+        if pallet_level_precision_recall:
+            pallet_level_precision_recall.update(image_file_names, targets, minimized_pred_boxes)
+
         if mean_precision_recall:
-            minimized_pred_boxes = list()
-
-            for p in range(len(pred_boxes)):
-                bs = list()
-                ls = list()
-                ss = list()
-
-                b_l = pred_boxes[p]["boxes"].tolist()
-                l_l = pred_boxes[p]["labels"].tolist()
-                s_l = pred_boxes[p]["scores"].tolist()
-                for s in range(len(s_l)):
-                    if s_l[s] > 0.1:
-                        bs.append(b_l[s])
-                        ls.append(l_l[s])
-                        ss.append(s_l[s])
-
-                bs = torch.tensor(bs, dtype=torch.float32, device="cuda")
-                ls = torch.tensor(ls, dtype=torch.int64, device="cuda")
-                ss = torch.tensor(ss, dtype=torch.float32, device="cuda")
-
-                minimized_pred_boxes.append({
-                    "boxes": bs,
-                    "labels": ls,
-                    "scores": ss
-                })
-
             mean_precision_recall.update(minimized_pred_boxes, targets)
 
         return accuracy, loss
+
+    def _minimize_predicted_boxes(self, pred_boxes, score_threshold: float = 0.1):
+        minimized_pred_boxes = list()
+
+        for p in range(len(pred_boxes)):
+            bs = list()
+            ls = list()
+            ss = list()
+
+            b_l = pred_boxes[p]["boxes"].tolist()
+            l_l = pred_boxes[p]["labels"].tolist()
+            s_l = pred_boxes[p]["scores"].tolist()
+            for s in range(len(s_l)):
+                if s_l[s] > score_threshold:
+                    bs.append(b_l[s])
+                    ls.append(l_l[s])
+                    ss.append(s_l[s])
+
+            bs = torch.tensor(bs, dtype=torch.int64, device=self.device)
+            ls = torch.tensor(ls, dtype=torch.int64, device=self.device)
+            ss = torch.tensor(ss, dtype=torch.float32, device=self.device)
+
+            minimized_pred_boxes.append({
+                "boxes": bs,
+                "labels": ls,
+                "scores": ss
+            })
+
+        return minimized_pred_boxes
 
     @staticmethod
     def _convert_gt_annotations_to_targets(boxes, labels):
