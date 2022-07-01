@@ -11,8 +11,8 @@ from callbacks import callbacks
 
 if __name__ == '__main__':
     # TODO: place the below configurations in config files. probably use hydra
-    max_pallets_to_load: int = 1  # use int <= 0 to load all available pallets
-    run_training: bool = False
+    max_pallets_to_load: int = 0  # use int <= 0 to load all available pallets
+    run_training: bool = True
     run_testing: bool = True
 
     mc2cnn_data_directory: str = "datasets"
@@ -44,7 +44,7 @@ if __name__ == '__main__':
     tensorboard_logger_save_dir: str = "./"
     tensorboard_logger_version: Union[int, None] = None
 
-    checkpoint_path: Union[str, None] = "lightning_logs/version_0/checkpoints/epoch=28-step=171448.ckpt"
+    checkpoint_path: Union[str, None] = None
 
     torch.cuda.empty_cache()
 

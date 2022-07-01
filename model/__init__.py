@@ -52,7 +52,6 @@ class MC2CNN(LightningModule):
         self.test_mean_precision_recall = MeanAveragePrecision(class_metrics=True)
 
         self.test_pallet_level_precision_recall = PalletLevelPrecisionRecall(
-            file_name="test_truth_table",
             passes_per_pallet=passes_per_pallet,
             views_per_pass=views_per_pass,
             pallet_manipulations=pallet_manipulations,

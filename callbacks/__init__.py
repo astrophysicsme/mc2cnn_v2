@@ -6,7 +6,7 @@ tqdm_progress_bar_refresh_rate: int = 20
 
 early_stopping_monitor: str = "val_accuracy"
 early_stopping_min_delta: float = 0.00
-early_stopping_patience: int = 5
+early_stopping_patience: int = 3
 early_stopping_verbose: bool = False
 early_stopping_mode: str = "max"
 
