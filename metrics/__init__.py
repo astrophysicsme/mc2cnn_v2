@@ -156,11 +156,7 @@ class PalletLevelPrecisionRecall:
             gt_boxes = pass_result["gt_boxes"]
             gt_labels = pass_result["gt_labels"]
             gt_views = pass_result["gt_views"]
-            pass_result["tp"] = 0
-            pass_result["fp"] = 0
-            pass_result["fn"] = 0
-
-            number_of_threats = 0
+            pass_result["tp"], pass_result["fp"], pass_result["fn"], number_of_threats = 0, 0, 0, 0
             for x in gt_boxes:
                 number_of_threats += len(x)
 
@@ -343,7 +339,6 @@ class PalletLevelPrecisionRecall:
         y2 = np.min([y2_gt, y2_pred])
 
         intersection_area = (x2 - x1 + 1) * (y2 - y1 + 1)
-
         union_area = (gt_bbox_area + pred_bbox_area - intersection_area)
 
         return intersection_area / union_area
@@ -371,9 +366,7 @@ class PalletLevelPrecisionRecall:
 
     def _check_three_consecutive_views(self, current_view, first_view, second_view, col_pref, is_gt: bool):
         picked_boxes, picked_labels, picked_scores, picked_views = [], [], [], []
-
         view_number = int(str(current_view["image_file_name"][16:18]).rstrip('.').rstrip('_'))
-
         for t in range(len(current_view[f"{col_pref}_boxes"])):
             vote = 0
             current_box = current_view[f"{col_pref}_boxes"][t]
