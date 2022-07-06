@@ -5,7 +5,7 @@ from typing import Union
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from data.__init__ import MC2CNNDataModule
+from data import MC2CNNDataModule
 from model import MC2CNN
 from callbacks import callbacks
 
@@ -18,7 +18,7 @@ if __name__ == '__main__':
     mc2cnn_data_directory: str = "datasets"
     mc2cnn_data_annotation_file_name: str = "_annotation.coco.json"
     mc2cnn_data_num_workers: int = 0
-    mc2cnn_data_batch_size: int = 2
+    mc2cnn_data_batch_size: int = 4
 
     mc2cnn_pallet_manipulations: int = 4
     mc2cnn_pallet_manipulations_identifiers: tuple = ("_vchw.", "_hw.", "_vc.", "")
@@ -34,7 +34,14 @@ if __name__ == '__main__':
     mc2cnn_weight_decay: float = 0.005
     mc2cnn_momentum: float = 0.9
 
+    mc2cnn_lr_scheduler_mode: str = "max"
+    mc2cnn_lr_scheduler_factor: float = 0.75
+    mc2cnn_lr_scheduler_patience: int = 3
+    mc2cnn_lr_scheduler_min_lr: int = 0
+
     mc2cnn_box_nms_threshold: float = 0.3
+
+    mc2cnn_confidence_threshold = 0.75
 
     trainer_num_gpus: int = min(1, torch.cuda.device_count())
     trainer_epochs: int = 100
@@ -55,12 +62,15 @@ if __name__ == '__main__':
                                           max_pallets_to_load=max_pallets_to_load)
 
     # Init our model
-    mc2cnn = MC2CNN(resnet_name="resnet152", n_classes=mc2cnn_num_classes, lr_rate=mc2cnn_learning_rate,
+    mc2cnn = MC2CNN(resnet_name="resnet101", n_classes=mc2cnn_num_classes, lr_rate=mc2cnn_learning_rate,
                     batch_size=mc2cnn_data_batch_size, box_nms_threshold=mc2cnn_box_nms_threshold,
                     weight_decay=mc2cnn_weight_decay, momentum=mc2cnn_momentum, max_image_size=mc2cnn_max_image_size,
                     views_per_pallet=mc2cnn_views_per_pallet, pallet_manipulations=mc2cnn_pallet_manipulations,
                     passes_per_pallet=mc2cnn_passes_per_pallet, views_per_pass=mc2cnn_views_per_pass,
-                    pallet_manipulations_identifiers=mc2cnn_pallet_manipulations_identifiers)
+                    pallet_manipulations_identifiers=mc2cnn_pallet_manipulations_identifiers,
+                    lr_scheduler_mode=mc2cnn_lr_scheduler_mode, lr_scheduler_factor=mc2cnn_lr_scheduler_factor,
+                    lr_scheduler_patience=mc2cnn_lr_scheduler_patience, lr_scheduler_min_lr=mc2cnn_lr_scheduler_min_lr,
+                    confidence_threshold=mc2cnn_confidence_threshold)
 
     if tensorboard_logger_version is None:
         logger = TensorBoardLogger(save_dir=tensorboard_logger_save_dir)
@@ -88,7 +98,7 @@ if __name__ == '__main__':
             trainer.fit(model=mc2cnn, datamodule=mc2cnn_data_module,
                         ckpt_path=checkpoint_path)
 
-    # TODO: Hyperparameter tuning
+    # TODO: Hyperparameter tuning. use ray tune
 
     if run_testing:
         if checkpoint_path is None:

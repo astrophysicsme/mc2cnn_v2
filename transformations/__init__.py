@@ -13,15 +13,12 @@ from albumentations.pytorch import ToTensorV2
 def transform(stage="test"):
     assert stage in ("train", "val", "test")
 
-    transformations_array = [TopPadding()]
-
+    transformations = [TopPadding(), ToTensor()]
     # TODO: implement ImgAug transformations
     # if stage == "train":
     #     transformations_array.append(ImgAugTransform())
 
-    transformations_array.append(ToTensor())
-
-    return Compose(transformations_array)
+    return Compose(transformations)
 
 
 class Compose(object):

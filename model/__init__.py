@@ -35,6 +35,11 @@ class MC2CNN(LightningModule):
             views_per_pallet: Optional[int] = 30,
             passes_per_pallet: Optional[int] = 5,
             views_per_pass: Optional[int] = 6,
+            lr_scheduler_mode: Optional[str] = "max",
+            lr_scheduler_factor: Optional[float] = 0.75,
+            lr_scheduler_patience: Optional[int] = 3,
+            lr_scheduler_min_lr: Optional[int] = 0,
+            confidence_threshold: Optional[float] = 0.75,
     ):
         super().__init__()
 
@@ -57,6 +62,7 @@ class MC2CNN(LightningModule):
             pallet_manipulations=pallet_manipulations,
             pallet_manipulations_identifiers=pallet_manipulations_identifiers,
             views_per_pallet=views_per_pallet,
+            confidence_threshold=confidence_threshold
         )
 
         self.detector = _fasterrcnn_resnet_fpn(resnet_name=resnet_name, pretrained=True,
@@ -70,6 +76,11 @@ class MC2CNN(LightningModule):
         self.batch_size = batch_size
         self.momentum = momentum
 
+        self.lr_scheduler_mode = lr_scheduler_mode
+        self.lr_scheduler_factor = lr_scheduler_factor
+        self.lr_scheduler_patience = lr_scheduler_patience
+        self.lr_scheduler_min_lr = lr_scheduler_min_lr
+
     def forward(self, images, targets=None):
         self.detector.eval()
         return self.detector(images)
@@ -78,7 +89,10 @@ class MC2CNN(LightningModule):
         optimizer = optim.SGD(self.parameters(), lr=self.lr or self.learning_rate, weight_decay=self.weight_decay,
                               momentum=self.momentum)
 
-        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.75, patience=3, min_lr=0)
+        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, mode=self.lr_scheduler_mode,
+                                                            factor=self.lr_scheduler_factor,
+                                                            patience=self.lr_scheduler_patience,
+                                                            min_lr=self.lr_scheduler_min_lr)
 
         return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler, 'monitor': 'val_accuracy'}
 
@@ -225,10 +239,10 @@ class MC2CNN(LightningModule):
             assert len(val) == 2
             original_image_sizes.append((val[0], val[1]))
 
+        # TODO: handle annotation files that does not have any threats in the ground truth
         images, targets = model.transform(images, targets)
 
         # Check for degenerate boxes
-        # TODO: Move this to a function
         if targets is not None:
             for target_idx, target in enumerate(targets):
                 boxes = target["boxes"]
@@ -337,6 +351,7 @@ def _fasterrcnn_resnet_fpn(
 ):
     assert resnet_name in ("resnet18", "resnet34", "resnet50", "resnet101", "resnet152")
 
+    # TODO: investigate more the number of layers that needs to be used in case of all the supported resnet models
     trainable_backbone_layers = _validate_trainable_layers(
         pretrained or pretrained_backbone, trainable_backbone_layers, 5, 3)
 
