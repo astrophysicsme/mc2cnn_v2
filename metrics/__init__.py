@@ -148,9 +148,7 @@ class PalletLevelPrecisionRecall:
                         "pred_views": p_views,
                     })
 
-        precisions = []
-        recalls = []
-        pass_results = []
+        precisions, recalls, pass_results = [], [], []
         for pass_result in pass_level_truth_table:
             p_boxes = pass_result["pred_boxes"]
             p_labels = pass_result["pred_labels"]
@@ -209,10 +207,7 @@ class PalletLevelPrecisionRecall:
         return summary
 
     def _single_to_pallet_truth_table(self, views, col_pref, is_gt=False):
-        pass_boxes = []
-        pass_labels = []
-        pass_scores = []
-        pass_views = []
+        pass_boxes, pass_labels, pass_scores, pass_views = [], [], [], []
 
         res = [
             self._check_three_consecutive_views(views.iloc[0], views.iloc[1], views.iloc[2], col_pref, is_gt),
@@ -375,10 +370,7 @@ class PalletLevelPrecisionRecall:
         return local_vote
 
     def _check_three_consecutive_views(self, current_view, first_view, second_view, col_pref, is_gt: bool):
-        picked_boxes = []
-        picked_labels = []
-        picked_scores = []
-        picked_views = []
+        picked_boxes, picked_labels, picked_scores, picked_views = [], [], [], []
 
         view_number = int(str(current_view["image_file_name"][16:18]).rstrip('.').rstrip('_'))
 
